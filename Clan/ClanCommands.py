@@ -92,8 +92,7 @@ class ClanCommands(commands.Cog, name="Clan Commands"):
                 emoji=trophy, value="trophies"),
             disnake.SelectOption(
                 label="Players, Sorted: TH",
-                emoji=self.bot.partial_emoji_gen(
-                    self.bot.fetch_emoji(14)), value="townhalls"),
+                emoji=self.bot.fetch_emoji(15).partial_emoji, value="townhalls"),
             disnake.SelectOption(
                 label="War Opt Statuses",
                 emoji=opt, value="opt"),
@@ -365,7 +364,7 @@ class ClanCommands(commands.Cog, name="Clan Commands"):
     async def clan_board(
             self, ctx: disnake.ApplicationCommandInteraction,
             clan: coc.Clan = commands.Param(converter=clan_converter),
-            button_text: str = None, button_link: str = None):
+            button_text: str = None, button_link: str = None, image: disnake.Attachment = None):
         """
             Parameters
             ----------
@@ -395,6 +394,9 @@ class ClanCommands(commands.Cog, name="Clan Commands"):
             embed.fields) - 1, name="**Boosted Super Troops:**",
             value=values, inline=False)
 
+        if image is not None:
+            embed.set_image(url=image.url)
+
         buttons = disnake.ui.ActionRow()
         buttons.append_item(disnake.ui.Button(
             label="", emoji=self.bot.emoji.refresh.partial_emoji,
@@ -409,9 +411,10 @@ class ClanCommands(commands.Cog, name="Clan Commands"):
                 label=button_text, emoji="🔗", url=button_link))
 
         try:
-            await ctx.edit_original_message(
-                embed=embed, components=buttons)
-
+            await ctx.edit_original_message(content="Sent")
+            msg = await ctx.original_message()
+            await msg.delete()
+            await ctx.channel.send(embed=embed, components=buttons)
         except disnake.errors.HTTPException:
             embed = disnake.Embed(
                 description="Not a valid button link.",
@@ -586,7 +589,7 @@ class ClanCommands(commands.Cog, name="Clan Commands"):
 
         await ctx.edit_original_message(embed=embed, components=buttons)
 
-    @clan.sub_command(
+    '''@clan.sub_command(
         name="games",
         description="Points earned in clan games by clan members")
     async def clan_games(
@@ -652,7 +655,7 @@ class ClanCommands(commands.Cog, name="Clan Commands"):
                 style=disnake.ButtonStyle.grey,
                 custom_id=f"clangames{_season}_{clan.tag}"))
 
-        await ctx.edit_original_message(embed=embed, components=buttons)
+        await ctx.edit_original_message(embed=embed, components=buttons)'''
 
     @clan.sub_command(
         name="donations",
@@ -1001,7 +1004,8 @@ class ClanCommands(commands.Cog, name="Clan Commands"):
         await res.edit_original_message(
             embed=None,
             components=[],
-            content=missing_text)
+            content="||Ping Sent||")
+        await ctx.followup.send(content=missing_text)
 
 
 
@@ -1470,6 +1474,11 @@ class ClanCommands(commands.Cog, name="Clan Commands"):
                 embed.fields) - 1, name="**Boosted Super Troops:**",
                 value=values, inline=False)
 
+            try:
+                embed.set_image(url=ctx.message.embeds[0].image.url)
+            except:
+                pass
+
             await ctx.edit_original_message(embed=embed)
 
         elif "townhall_" in str(ctx.data.custom_id):
@@ -1659,7 +1668,6 @@ class ClanCommands(commands.Cog, name="Clan Commands"):
 
     @war_stats_clan.autocomplete("season")
     @clan_donations.autocomplete("season")
-    @clan_games.autocomplete("season")
     @activities.autocomplete("season")
     async def season(self, ctx: disnake.ApplicationCommandInteraction, query: str):
         seasons = self.bot.gen_season_date(seasons_ago=12)[0:]
@@ -1685,7 +1693,6 @@ class ClanCommands(commands.Cog, name="Clan Commands"):
     @player_th.autocomplete("clan")
     @clan_compo.autocomplete("clan")
     @last_online.autocomplete("clan")
-    @clan_games.autocomplete("clan")
     @clan_donations.autocomplete("clan")
     @activity_graph.autocomplete("clan")
     @war_stats_clan.autocomplete("clan")

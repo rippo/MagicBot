@@ -94,6 +94,7 @@ class Roster_Commands(commands.Cog, name="Rosters"):
     @roster.sub_command(name="add-player", description="Add a player to a roster")
     @commands.check_any(commands.has_permissions(manage_guild=True), check_commands())
     async def roster_add(self, ctx: disnake.ApplicationCommandInteraction, roster: str, players: List[coc.Player] = commands.Param(converter=player_convertor), sub = commands.Param(name="sub", default=False, choices=["Yes"])):
+        await ctx.response.defer(ephemeral=True)
         _roster = Roster(bot=self.bot)
         await _roster.find_roster(guild=ctx.guild, alias=roster)
         added_text = ""
@@ -817,7 +818,7 @@ class Roster_Commands(commands.Cog, name="Rosters"):
                 if account.tag in roster_tags:
                     continue
                 player_dict[account.tag] = account
-                options.append(disnake.SelectOption(label=account.name, emoji=self.bot.partial_emoji_gen(self.bot.fetch_emoji(name=account.town_hall)), value=f"{account.tag}"))
+                options.append(disnake.SelectOption(label=account.name, emoji=self.bot.fetch_emoji(name=account.town_hall).partial_emoji, value=f"{account.tag}"))
 
             if not options:
                 return await ctx.send(content="No accounts to add", ephemeral=True)
@@ -878,8 +879,7 @@ class Roster_Commands(commands.Cog, name="Rosters"):
                 if account.tag not in roster_tags:
                     continue
                 player_dict[account.tag] = account
-                options.append(disnake.SelectOption(label=account.name, emoji=self.bot.partial_emoji_gen(
-                    self.bot.fetch_emoji(name=account.town_hall)), value=f"{account.tag}"))
+                options.append(disnake.SelectOption(label=account.name, emoji=self.bot.fetch_emoji(name=account.town_hall).partial_emoji, value=f"{account.tag}"))
 
             if not options:
                 return await ctx.send(content="No accounts to remove", ephemeral=True)
@@ -941,8 +941,8 @@ class Roster_Commands(commands.Cog, name="Rosters"):
                 if account.tag in roster_tags:
                     continue
                 player_dict[account.tag] = account
-                options.append(disnake.SelectOption(label=account.name, emoji=self.bot.partial_emoji_gen(
-                    self.bot.fetch_emoji(name=account.town_hall)), value=f"{account.tag}"))
+                options.append(disnake.SelectOption(label=account.name, emoji=
+                    self.bot.fetch_emoji(name=account.town_hall).partial_emoji, value=f"{account.tag}"))
 
             if not options:
                 return await ctx.send(content="No accounts to add", ephemeral=True)

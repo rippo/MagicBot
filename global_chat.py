@@ -10,7 +10,8 @@ import spacy
 from profanity_filter import ProfanityFilter
 import asyncio
 from main import scheduler
-
+from collections import defaultdict
+last_ping = defaultdict(int)
 staff_webhook = 0
 class GlobalChat(commands.Cog, name="Global Chat"):
 
@@ -74,6 +75,21 @@ class GlobalChat(commands.Cog, name="Global Chat"):
             files += [await sticker.to_file() for sticker in message.stickers]
             files = files[:10]
             await staff_channel.send(content=message.content + f"\nUser: `{str(message.author)}` | User_ID:`{message.author.id} | Msg: `{message.id}`", files=files, allowed_mentions=disnake.AllowedMentions.none())
+
+        result = await self.bot.open_tickets.find_one({"channel": message.channel.id})
+        if result is not None:
+            if message.author.id != result.get("user"):
+                return
+            opted_in = result.get("opted_in")
+            if opted_in is not None:
+                text = ""
+                for user in opted_in:
+                    text += f"<@{user}> "
+                global last_ping
+                if int(datetime.datetime.now().timestamp()) - last_ping[message.channel.id] >= 60:
+                    await message.channel.send(content=text, delete_after=1)
+                    last_ping[message.channel.id] = int(datetime.datetime.now().timestamp())
+
 
     async def send_rules(self):
         async def webhook_task(channel, embed_):

@@ -16,8 +16,8 @@ class DiscordEvents(commands.Cog):
     @commands.Cog.listener()
     async def on_ready(self):
         len_g = len(self.bot.guilds)
-        await self.bot.change_presence(
-            activity=disnake.Activity(name=f'{len_g} servers', type=3))  # type 3 watching type#1 - playing
+        for count, shard in self.bot.shards.items():
+            await self.bot.change_presence(activity=disnake.Activity(name=f'{len_g} servers | Shard {count + 1}' ,type=3), shard_id=shard.id)  # type 3 watching type#1 - playing
 
     @commands.Cog.listener()
     async def on_connect(self):
@@ -31,7 +31,8 @@ class DiscordEvents(commands.Cog):
             if strikes >= 3:
                 self.bot.banned_global.append(banned.get("user"))
 
-        tags = await self.bot.clan_db.distinct("tag")
+
+        '''tags = await self.bot.clan_db.distinct("tag")
         self.bot.clan_list = tags
         reminder_tags = await self.bot.reminders.distinct("clan", filter={"type" : "War"})
         self.bot.coc_client.add_war_updates(*tags)
@@ -53,8 +54,11 @@ class DiscordEvents(commands.Cog):
                 if reminder_time.is_integer():
                     reminder_time = int(reminder_time)
                 send_time = time[1]
-                scheduler.add_job(cog.war_reminder, 'date', run_date=send_time, args=[tag, reminder_time], id=f"{reminder_time}_{tag}", name=f"{tag}", misfire_grace_time=None)
-        scheduler.print_jobs()
+                try:
+                    scheduler.add_job(cog.war_reminder, 'date', run_date=send_time, args=[tag, reminder_time], id=f"{reminder_time}_{tag}", name=f"{tag}", misfire_grace_time=None)
+                except:
+                    pass
+        scheduler.print_jobs()'''
 
         for g in self.bot.guilds:
             results = await self.bot.server_db.find_one({"server": g.id})
@@ -72,54 +76,6 @@ class DiscordEvents(commands.Cog):
                 })
 
         print('We have logged in')
-
-
-    @commands.Cog.listener()
-    async def on_message(self, message : disnake.Message):
-        if "https://link.clashofclans.com/en?action=OpenPlayerProfile&tag=" in message.content:
-            m = message.content.replace("\n", " ")
-            spots = m.split(" ")
-            s = ""
-            for spot in spots:
-                if "https://link.clashofclans.com/en?action=OpenPlayerProfile&tag=" in spot:
-                    s = spot
-                    break
-            tag = s.replace("https://link.clashofclans.com/en?action=OpenPlayerProfile&tag=", "")
-            if "%23" in tag:
-                tag = tag.replace("%23", "")
-            player = await self.bot.getPlayer(tag)
-
-            clan = ""
-            try:
-                clan = player.clan.name
-                clan = f"{clan}"
-            except:
-                clan = "None"
-            hero = heros(player)
-            pets = heroPets(player)
-            if hero is None:
-                hero = ""
-            else:
-                hero = f"**Heroes:**\n{hero}\n"
-
-            if pets is None:
-                pets = ""
-            else:
-                pets = f"**Pets:**\n{pets}\n"
-
-            embed = disnake.Embed(title=f"Invite {player.name} to your clan:",
-                                  description=f"{player.name} - TH{player.town_hall}\n" +
-                                              f"Tag: {player.tag}\n" +
-                                              f"Clan: {clan}\n" +
-                                              f"Trophies: {player.trophies}\n"
-                                              f"War Stars: {player.war_stars}\n"
-                                              f"{hero}{pets}"
-                                              f'[View Stats](https://www.clashofstats.com/players/{player.tag}) | [Open in Game]({player.share_link})',
-                                  color=disnake.Color.green())
-            embed.set_thumbnail(url=thDictionary(player.town_hall))
-
-            channel = message.channel
-            await channel.send(embed=embed)
 
 
     @commands.Cog.listener()
@@ -141,8 +97,11 @@ class DiscordEvents(commands.Cog):
         await channel.send(f"Just joined {guild.name}")
         owner = guild.owner
         len_g = len(self.bot.guilds)
-        await self.bot.change_presence(
-            activity=disnake.Activity(name=f'{len_g} servers', type=3))  # type 3 watching type#1 - playing
+        for count, shard in self.bot.shards.items():
+            await self.bot.change_presence(
+                activity=disnake.Activity(name=f'{len_g} servers | Shard {count + 1}',
+                                          type=3), shard_id=shard.id)  # type 3 watching type#1 - playing
+
         channel = self.bot.get_channel(937528942661877851)
         await channel.edit(name=f"ClashKing: {len_g} Servers")
 
@@ -152,8 +111,10 @@ class DiscordEvents(commands.Cog):
         channel = self.bot.get_channel(937519135607373874)
         await channel.send(f"Just left {guild.name}, {guild.member_count} members")
         len_g = len(self.bot.guilds)
-        await self.bot.change_presence(
-            activity=disnake.Activity(name=f'{len_g} servers', type=3))  # type 3 watching type#1 - playing
+        for count, shard in self.bot.shards.items():
+            await self.bot.change_presence(
+                activity=disnake.Activity(name=f'{len_g} servers | Shard {count + 1}',
+                                          type=3), shard_id=shard.id)  # type 3 watching type#1 - playing
         channel = self.bot.get_channel(937528942661877851)
         await channel.edit(name=f"ClashKing: {len_g} Servers")
 
@@ -222,6 +183,33 @@ class DiscordEvents(commands.Cog):
             embed = disnake.Embed(description=f"Roster has hit max size limit",
                                   color=disnake.Color.red())
             return await ctx.send(embed=embed, ephemeral=True)
+
+        if isinstance(error, PanelNotFound):
+            embed = disnake.Embed(description=f"Panel not found!",
+                                  color=disnake.Color.red())
+            return await ctx.send(embed=embed, ephemeral=True)
+
+        if isinstance(error, ButtonNotFound):
+            embed = disnake.Embed(description=f"Button not found!",
+                                  color=disnake.Color.red())
+            return await ctx.send(embed=embed, ephemeral=True)
+
+        if isinstance(error, PanelAlreadyExists):
+            embed = disnake.Embed(description=f"Panel of this name already exists!",
+                                  color=disnake.Color.red())
+            return await ctx.send(embed=embed, ephemeral=True)
+
+        if isinstance(error, ButtonAlreadyExists):
+            embed = disnake.Embed(description=f"Button of this name already exists!",
+                                  color=disnake.Color.red())
+            return await ctx.send(embed=embed, ephemeral=True)
+
+        if isinstance(error, FaultyJson):
+            embed = disnake.Embed(description=f"Custom Embed Code is Faulty - > be sure to use this site -> https://autocode.com/tools/discord/embed-builder/ , "
+                                              f"create your embed, then click `copy code`",
+                                  color=disnake.Color.red())
+            return await ctx.send(embed=embed, ephemeral=True)
+
 
 
 def setup(bot: CustomClient):

@@ -191,8 +191,7 @@ class eval(commands.Cog, name="Eval"):
         for player in results:
             player = player[1]
             options.append(disnake.SelectOption(label=f"{player.name}", value=f"{player.name}",
-                                                emoji=self.bot.partial_emoji_gen(
-                                                    emoji_string=self.bot.fetch_emoji(player.town_hall))))
+                                                emoji=self.bot.fetch_emoji(player.town_hall).partial_emoji))
 
         profile_select = disnake.ui.Select(options=options, placeholder="Account List", min_values=1,
                                            max_values=1)
@@ -330,7 +329,7 @@ class eval(commands.Cog, name="Eval"):
         results = sorted(list_accounts, key=lambda l: l[0], reverse=True)
         for player in results:
             player = player[1]
-            options.append(disnake.SelectOption(label=f"{player.name}", value=f"{player.name}", emoji=self.bot.partial_emoji_gen(emoji_string=self.bot.fetch_emoji(player.town_hall))))
+            options.append(disnake.SelectOption(label=f"{player.name}", value=f"{player.name}", emoji=self.bot.fetch_emoji(player.town_hall).partial_emoji))
 
         profile_select = disnake.ui.Select(options=options, placeholder="Account List", min_values=1,
                                            max_values=1)
@@ -545,6 +544,8 @@ class eval(commands.Cog, name="Eval"):
 
                 for player in players:
                     if isinstance(player, coc.errors.NotFound):
+                        continue
+                    if player is None:
                         continue
                     list_accounts.append([player.trophies, player])
                     # check if is a family member for 2 things - 1. to check for global roles (Not/is family) and 2. for if they shuld get roles on individual lvl

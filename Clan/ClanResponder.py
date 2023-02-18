@@ -133,7 +133,7 @@ async def clan_overview(clan: coc.Clan, db_clan, clan_legend_ranking, previous_s
     else:
         response = response.get("data")
 
-    if "Not Found" not in str(response) and response is not None:
+    if "Not Found" not in str(response) and "'status': 500" not in str(response) and response is not None:
         text, year = response_to_line(response, clan)
         cwl_text = text
 
@@ -968,7 +968,7 @@ def stat_components(bot):
     options = []
     for townhall in reversed(range(6, 16)):
         options.append(disnake.SelectOption(
-            label=f"Townhall {townhall}", emoji=bot.fetch_emoji(name=townhall), value=str(townhall)))
+            label=f"Townhall {townhall}", emoji=str(bot.fetch_emoji(name=townhall)), value=str(townhall)))
     th_select = disnake.ui.Select(
         options=options,
         # the placeholder text to show when no options have been chosen

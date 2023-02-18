@@ -1,19 +1,22 @@
+import json
 from datetime import datetime
 from datetime import timedelta
 from coc import utils
 from coc.ext import discordlinks
-from coc.ext.fullwarapi import FullWarClient
-from coc.ext import fullwarapi
+#from coc.ext.fullwarapi import FullWarClient
+#from coc.ext import fullwarapi
 from disnake.ext import commands
 from dotenv import load_dotenv
 from Assets.emojiDictionary import emojiDictionary, legend_emojis
 from CustomClasses.CustomPlayer import MyCustomPlayer
 from CustomClasses.emoji_class import Emojis, EmojiType
-from pyyoutube import Api
 from urllib.request import urlopen
 from collections import defaultdict
-import dateutil.relativedelta
+from utils.troop_methods import cwl_league_emojis
+from CustomClasses.PlayerHistory import COSPlayerHistory
 
+import dateutil.relativedelta
+import ast
 import coc
 import motor.motor_asyncio
 import disnake
@@ -24,6 +27,7 @@ import asyncio
 import collections
 import random
 import calendar
+import aiohttp
 
 utc = pytz.utc
 load_dotenv()
@@ -78,10 +82,9 @@ BADGE_GUILDS = [1029631304817451078, 1029631182196977766, 1029631107240562689, 1
                              1029629694854828082, 1029629763087777862, 1029629811221610516, 1029629853017841754, 1029629905903833139,
                              1029629953907634286, 1029629992830783549, 1029630376911581255, 1029630455202455563, 1029630702125318144,
                              1029630796966932520, 1029630873588469760, 1029630918106824754, 1029630974025277470, 1029631012084396102]
-api = Api(api_key=os.getenv("YT_API_KEY"))
-from linode_api4 import LinodeClient
 
-class CustomClient(commands.Bot):
+
+class CustomClient(commands.AutoShardedBot):
     def __init__(self, **options):
         super().__init__(**options)
         self.looper_db = motor.motor_asyncio.AsyncIOMotorClient(os.getenv("LOOPER_DB_LOGIN"))
@@ -95,8 +98,10 @@ class CustomClient(commands.Bot):
         self.webhook_message_db = self.looper_db.looper.webhook_messages
         self.user_name = "admin"
         self.cwl_db = self.looper_db.looper.cwl_db
+        self.leveling = self.new_looper.leveling
+        self.clan_wars = self.looper_db.looper.clan_wars
 
-        self.link_client = asyncio.get_event_loop().run_until_complete(discordlinks.login(os.getenv("LINK_API_USER"), os.getenv("LINK_API_PW")))
+        self.link_client: coc.ext.discordlinks.DiscordLinkClient = asyncio.get_event_loop().run_until_complete(discordlinks.login(os.getenv("LINK_API_USER"), os.getenv("LINK_API_PW")))
 
         self.db_client = motor.motor_asyncio.AsyncIOMotorClient(os.getenv("DB_LOGIN"))
         self.clan_db = self.db_client.usafam.clans
@@ -124,26 +129,34 @@ class CustomClient(commands.Bot):
         self.global_reports = self.db_client.usafam.reports
         self.strikelist = self.db_client.usafam.strikes
         self.raid_weekend_db = self.db_client.usafam.raid_weekends
-        self.ticketing = self.db_client.usafam.tickets
+        self.tickets = self.db_client.usafam.tickets
+        self.open_tickets = self.db_client.usafam.open_tickets
+        self.custom_embeds = self.db_client.usafam.custom_embeds
+        self.custom_commands = self.db_client.usafam.custom_commands
+        self.bases = self.db_client.usafam.bases
+        self.colors = self.db_client.usafam.colors
+        self.level_cards = self.db_client.usafam.level_cards
+        self.autostrikes = self.db_client.usafam.autostrikes
 
-        self.coc_client = coc.login(os.getenv("COC_EMAIL"), os.getenv("COC_PASSWORD"), client=coc.EventsClient, key_count=10, key_names="DiscordBot", throttle_limit = 30,
-                                    cache_max_size=50000, load_game_data=coc.LoadGameData(always=True), stats_max_size=10000)
+        self.autoboard_db = self.db_client.usafam.autoboard_db
 
-        self.war_client: FullWarClient = asyncio.get_event_loop().run_until_complete(fullwarapi.login(username=os.getenv("FW_USER"), password=os.getenv("FW_PW"), clash_client=self.coc_client))
+        self.coc_client = coc.EventsClient(key_count=10, key_names="DiscordBot", throttle_limit = 25,cache_max_size=50000, load_game_data=coc.LoadGameData(always=True), stats_max_size=10000)
+        self.xyz = asyncio.get_event_loop().run_until_complete(self.coc_client.login(os.getenv("COC_EMAIL"), os.getenv("COC_PASSWORD")))
+
+        #self.war_client: FullWarClient = asyncio.get_event_loop().run_until_complete(fullwarapi.login(username=os.getenv("FW_USER"), password=os.getenv("FW_PW"), clash_client=self.coc_client))
 
         self.emoji = emoji_class
         self.locations = locations
 
-        self.yt_api = api
-
         self.MAX_FEED_LEN = 5
         self.FAQ_CHANNEL_ID = 1010727127806648371
 
-        self.linode_client: LinodeClient = LinodeClient(os.getenv("LINODE"))
         self.global_channels = []
         self.last_message = defaultdict(int)
         self.banned_global = [859653218979151892]
         self.global_webhooks = defaultdict(str)
+
+        self.feed_webhooks = {}
 
         self.clan_list = []
 
@@ -183,10 +196,11 @@ class CustomClient(commands.Bot):
             elif color == "gold":
                 guild = self.get_guild(1042301195240357958)
         elif number >= 51:
+            print(color)
             if color == "white":
                 guild = self.get_guild(1042635651562086430)
             elif color == "blue":
-                guild = self.get_guild(1042301258167484426)
+                guild = self.get_guild(1042635521890992158)
             elif color == "gold":
                 guild = self.get_guild(1042635608088125491)
         all_emojis = guild.emojis
@@ -312,8 +326,8 @@ class CustomClient(commands.Bot):
             ttt = await self.get_tags(query)
             for tag in ttt:
                 result = await self.player_stats.find_one({"$and": [
-                    {"tag": tag},
-                    {"league": {"$eq": "Legend League"}}
+                    {"league": {"$eq": "Legend League"}},
+                    {"tag": tag}
                 ]})
                 if result is not None:
                     tags.append(tag)
@@ -322,10 +336,18 @@ class CustomClient(commands.Bot):
 
         query = query.lower()
         query = re.escape(query)
-        results = self.player_stats.find({"$and": [
-            {"name": {"$regex": f"^(?i).*{query}.*$"}},
-            {"league": {"$eq": "Legend League"}}
-        ]})
+        results = self.player_stats.find({
+            "$and": [
+                {"league": {"$eq": "Legend League"}},
+                {
+                    "name": {"$regex": f"^(?i).*{query}.*$"}
+                }
+            ]}
+        ).limit(24)
+        '''results = self.player_stats.find({"$and": [
+            {"league": {"$eq": "Legend League"}},
+            {"name": {"$regex": f"^(?i).*{query}.*$"}}
+        ]})'''
         for document in await results.to_list(length=24):
             tags.append(document.get("tag"))
         return tags
@@ -336,14 +358,14 @@ class CustomClient(commands.Bot):
             names.append(query)
         # if search is a player tag, pull stats of the player tag
 
-        if utils.is_valid_tag(query) is True:
+        if len(query) >= 5 and utils.is_valid_tag(query) is True:
             t = utils.correct_tag(tag=query)
             query = query.lower()
             query = re.escape(query)
             results = self.player_stats.find({"$and": [
+                {"league": {"$eq": "Legend League"}},
                 {"tag": {"$regex": f"^(?i).*{t}.*$"}}
-                , {"league": {"$eq": "Legend League"}}
-            ]})
+            ]}).limit(24)
             for document in await results.to_list(length=24):
                 name = document.get("name")
                 if name is None:
@@ -358,10 +380,14 @@ class CustomClient(commands.Bot):
 
         query = query.lower()
         query = re.escape(query)
-        results = self.player_stats.find({"$and": [
-            {"name": {"$regex": f"^(?i).*{query}.*$"}}
-            , {"league": {"$eq": "Legend League"}}
-        ]})
+        results = self.player_stats.find({
+            "$and": [
+                {"league": {"$eq": "Legend League"}},
+                {
+                    "name": {"$regex": f"^(?i).*{query}.*$"}
+                }
+            ]}
+        ).limit(24)
         for document in await results.to_list(length=24):
             names.append(document.get("name") + " | " + document.get("tag"))
         return names
@@ -377,9 +403,9 @@ class CustomClient(commands.Bot):
             query = query.lower()
             query = re.escape(query)
             results = self.player_stats.find({"$and": [
+                {"clan_tag": {"$in": clan_tags}},
                 {"tag": {"$regex": f"^(?i).*{t}.*$"}}
-                , {"clan_tag": {"$in": clan_tags}}
-            ]})
+            ]}).limit(24)
             for document in await results.to_list(length=25):
                 name = document.get("name")
                 if name is None:
@@ -395,10 +421,9 @@ class CustomClient(commands.Bot):
         query = query.lower()
         query = re.escape(query)
         results = self.player_stats.find({"$and": [
+            {"clan_tag": {"$in": clan_tags}},
             {"name": {"$regex": f"^(?i).*{query}.*$"}}
-            , {"clan_tag": {"$in": clan_tags}}
-
-        ]})
+        ]}).limit(24)
         for document in await results.to_list(length=25):
             names.append(document.get("name") + " | " + document.get("tag"))
         return names[:25]
@@ -439,6 +464,8 @@ class CustomClient(commands.Bot):
     def partial_emoji_gen(self, emoji_string, animated=False):
         emoji = emoji_string.split(":")
         #emoji = self.get_emoji(int(str(emoji[2])[:-1]))
+        if "<a:" in emoji_string:
+            animated = True
         emoji = disnake.PartialEmoji(name=emoji[1][1:], id=int(str(emoji[2])[:-1]), animated=animated)
         return emoji
 
@@ -446,7 +473,7 @@ class CustomClient(commands.Bot):
         emoji = emojiDictionary(name)
         if emoji is None:
             emoji = legend_emojis(name)
-        return emoji
+        return EmojiType(emoji_string=emoji)
 
     async def pingToMember(self, ctx, ping, no_fetch=False):
         ping = str(ping)
@@ -499,6 +526,20 @@ class CustomClient(commands.Bot):
         channel = await self.fetch_channel(channel_id)
         return channel
 
+    async def getch_webhook(self, channel_id):
+        channel: disnake.TextChannel = await self.getch_channel(channel_id=channel_id)
+        try:
+            webhook = self.feed_webhooks[channel.id]
+        except:
+            webhooks = await channel.webhooks()
+            if len(webhooks) == 0:
+                bot_av = self.user.avatar.read().close()
+                webhook = await channel.create_webhook(name=self.user.name, avatar=bot_av, reason="Feed Webhook")
+            else:
+                webhook = next(webhook for webhook in webhooks if webhook.user.id == self.user.id)
+            self.feed_webhooks[channel.id] = webhook
+        return webhook
+
 
     #CLASH HELPERS
     async def player_handle(self, ctx, tag):
@@ -548,7 +589,7 @@ class CustomClient(commands.Bot):
             task = asyncio.ensure_future(self.getClan(clan_tag=tag))
             tasks.append(task)
         responses = await asyncio.gather(*tasks)
-        return responses
+        return [response for response in responses if response is not None]
 
     async def getClan(self, clan_tag, raise_exceptions=False):
         try:
@@ -569,8 +610,9 @@ class CustomClient(commands.Bot):
                 clan = await self.coc_client.get_clan(clan_tag)
             except:
                 return None
-        if clan.member_count == 0:
-            return None
+        if not raise_exceptions:
+            if clan.member_count == 0:
+                return None
         return clan
 
     async def get_current_war_times(self, tags: list):
@@ -615,6 +657,15 @@ class CustomClient(commands.Bot):
         responses = await asyncio.gather(*tasks)
         return responses
 
+    async def get_player_history(self, player_tag: str):
+        url = f"https://api.clashofstats.com/players/{player_tag.replace('#', '')}/history/clans"
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as resp:
+                history = await resp.json()
+                await session.close()
+                return COSPlayerHistory(data=history)
+
+
     #SERVER HELPERS
     async def open_clan_capital_reminders(self):
         pass
@@ -623,6 +674,9 @@ class CustomClient(commands.Bot):
         if ctx.author.id == 706149153431879760:
             return True
         member = ctx.author
+        roles = (await ctx.guild.getch_member(member_id=ctx.author.id)).roles
+        if disnake.utils.get(roles, name="ClashKing Perms") != None:
+            return True
 
         commandd = command_name
         guild = ctx.guild.id
@@ -652,3 +706,98 @@ class CustomClient(commands.Bot):
                     return True
 
         return perms
+
+
+    async def parse_to_embed(self, custom_json: str, clan: coc.Clan=None, guild: disnake.Guild = None):
+        custom_json = custom_json.replace("true", "True")
+
+        custom_json = custom_json.replace("`", '"')
+        new_string = ""
+        inside_string = False
+        last_two = []
+        for character in custom_json:
+            if character == '"':
+                inside_string = not inside_string
+
+            if not inside_string and not character.isspace():
+                new_string += character
+            elif inside_string:
+                new_string += character
+
+        custom_json = new_string
+        embed_json = re.findall('"embeds"(.*?)}]}\);', custom_json)
+        embed_json = embed_json[0]
+
+        embed_json = '{"embeds"' + embed_json + "}]}"
+        if clan is not None:
+            leader = coc.utils.get(clan.members, role=coc.Role.leader)
+            leader_link = await self.link_client.get_link(leader.tag)
+            if leader_link is None:
+                leader_link = ""
+            else:
+                leader_link = f"<@{leader_link}>"
+            clan_badge_emoji = await self.create_new_badge_emoji(url=clan.badge.url)
+            possible_attributes = {"clan.name": clan.name, "clan.badge_url": clan.badge.url, "clan.tag": clan.tag, "clan.badge_emoji" : clan_badge_emoji,
+                                   "clan.level": clan.level, "clan.type" : clan.type, "clan.war_frequency" : clan.war_frequency,
+                                   "clan.member_count" : clan.member_count, "clan.war_league" : clan.war_league,
+                                   "clan.war_league_emoji" : cwl_league_emojis(clan.war_league.name),
+                                   "clan.required_townhall" : clan.required_townhall, "clan.required_townhall_emoji" : self.fetch_emoji(name=clan.required_townhall),
+                                   "clan.leader" : leader.name , "clan.leader_discord" : leader_link,
+                                   "clan.share_link": clan.share_link, "clan.description": clan.description,
+                                   "clan.location": clan.location, "clan.points": clan.points,
+                                   "clan.versus_points": clan.versus_points, "clan.capital_points": clan.capital_points,
+                                   "clan.war_wins": clan.war_wins, "clan.member": clan.members}
+
+            member_attributes = ["name", "trophies", "tag", "role", "exp_level", "league"]
+            for attribute, replace in possible_attributes.items():
+                if "{clan.member[" not in attribute:
+                    embed_json = embed_json.replace(f"{{{attribute}}}", str(replace))
+                elif "{clan.member[" in embed_json:
+                    line_format = re.findall("{clan\.member\[(.*?)]}", embed_json)[0]
+                    all_lines = ""
+                    for member in clan.members:
+                        this_line = line_format
+                        for att in member_attributes:
+                            if f"clan_member.{att}" in this_line:
+                                this_line = this_line.replace(f"{{clan_member.{att}}}", str(getattr(member, att)))
+                        all_lines += f"{this_line}" + r'\n'
+                    embed_json = re.sub("{clan\.member(.*?)]}", all_lines, embed_json)
+
+        if guild is not None:
+            possible_attributes = {"guild.name": guild.name, "guild.icon" : guild.icon.url if guild.icon is not None else "",  "guild.banner" : guild.banner.url if guild.banner is not None else ""}
+            for attribute, replace in possible_attributes.items():
+                embed_json = embed_json.replace(f"{{{attribute}}}", str(replace))
+
+
+        embed_json = ast.literal_eval(embed_json.replace('\r','\\r').replace('\n','\\n').replace("^^","`"))
+
+        embed = disnake.Embed.from_dict(embed_json["embeds"][0])
+        return embed
+
+
+    def command_names(self):
+        commands = []
+        for command_ in self.slash_commands:
+            base_command = command_.name
+            children = command_.children
+            if children != {}:
+                for child in children:
+                    command = children[child]
+                    full_name = f"{base_command} {command.name}"
+                    commands.append(full_name)
+            else:
+                full_name = base_command
+                commands.append(full_name)
+        return commands
+
+    def is_cwl(self):
+        now = datetime.utcnow().replace(tzinfo=utc)
+        current_dayofweek = now.weekday()
+        if (current_dayofweek == 4 and now.hour >= 7) or (current_dayofweek == 5) or (current_dayofweek == 6) or (
+                current_dayofweek == 0 and now.hour < 7):
+            if current_dayofweek == 0:
+                current_dayofweek = 7
+            is_raids = True
+        else:
+            is_raids = False
+        return is_raids
